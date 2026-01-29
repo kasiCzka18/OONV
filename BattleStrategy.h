@@ -1,119 +1,59 @@
 #pragma once
+
 #ifndef BATTLESTRATEGY_H
 #define BATTLESTRATEGY_H
 
+#include <random>
+
 #include "Army.h"
+#include "Soldier.h"
 
 //#include <random>
 #include <iostream>
 
 class BattleStrategy {
 public:
-    virtual ~BattleStrategy() = default;
-    virtual void executeRound(Army& a, Army& b) = 0;
+    virtual void executeRound(IUnit& a, IUnit& b) = 0;
 };
+
+
 
 class ClassicBattleStrategy : public BattleStrategy {
 public:
-    void executeRound(Army& a, Army& b) override {
-        archerPhase(a, b);
-        archerPhase(b, a);
+    void executeRound(IUnit& a, IUnit& b) override
+    {
+        auto soldiersA = a.getSoldiers();
+        auto soldiersB = b.getSoldiers();
 
-        cavalryPhase(a, b);
-        cavalryPhase(b, a);
+        Soldier* sa = getRandomAlive(soldiersA);
+        Soldier* sb = getRandomAlive(soldiersB);
 
-        infantryPhase(a, b);
-        infantryPhase(b, a);
+        if (!sa || !sb) return;
 
-        allOutPhase(a, b);
-        allOutPhase(b, a);
+        // vzájemný útok
+        sb->takeDamage(sa->getDps());
+        sa->takeDamage(sb->getDps());
     }
 
 private:
-    // Najde prvního živého vojáka v libovolné skupině
-    Soldier* firstAliveAny(Army& army) {
-        if (auto s = firstAlive(army.archers)) return s;
-        if (auto s = firstAlive(army.cavalry)) return s;
-        if (auto s = firstAlive(army.infantry)) return s;
-        return nullptr;
-    }
+    Soldier* getRandomAlive(std::vector<IUnit*>& units)
+    {
+        std::vector<Soldier*> alive;
 
-    Soldier* firstAlive(ArmyGroup& group) {
-        for (auto& s : group.getSoldiers())
-            if (s.isAlive())
-                return &s;
-        return nullptr;
-    }
-
-    void archerPhase(Army& attacker, Army& defender) {
-        attackGroup(attacker.archers, defender.infantry, 1.5);
-    }
-
-    void cavalryPhase(Army& attacker, Army& defender) {
-        attackGroup(attacker.cavalry, defender.archers, 1.5);
-    }
-
-    void infantryPhase(Army& attacker, Army& defender) {
-        attackGroup(attacker.infantry, defender.cavalry, 1.5);
-    }
-
-    /*
-     ČTVRTÁ FÁZE:
-     Pokud zbyly jednotky, které nemají přirozený cíl,
-     útočí se bez bonusu na jakéhokoliv živého protivníka.
-    */
-    void allOutPhase(Army& attacker, Army& defender) {
-        Soldier* target = firstAliveAny(defender);
-        if (!target) return;
-
-        for (auto& s : attacker.archers.getSoldiers()) {
-            if (s.isAlive()) {
-                target->takeDamage(s.getDps());
-                if (!target->isAlive())
-                    target = firstAliveAny(defender);
-                if (!target) return;
-            }
+        for (auto* u : units)
+        {
+            auto* s = dynamic_cast<Soldier*>(u);
+            if (s && s->isAlive())
+                alive.push_back(s);
         }
 
-        for (auto& s : attacker.cavalry.getSoldiers()) {
-            if (s.isAlive()) {
-                target->takeDamage(s.getDps());
-                if (!target->isAlive())
-                    target = firstAliveAny(defender);
-                if (!target) return;
-            }
-        }
+        if (alive.empty()) return nullptr;
+        
+        // generator nahodneho ziveho vojaka z armady
+        static std::mt19937 rng{std::random_device{}()};
+        std::uniform_int_distribution<> dist(0, alive.size() - 1);
 
-        for (auto& s : attacker.infantry.getSoldiers()) {
-            if (s.isAlive()) {
-                target->takeDamage(s.getDps());
-                if (!target->isAlive())
-                    target = firstAliveAny(defender);
-                if (!target) return;
-            }
-        }
-    }
-
-    // Standardní útok skupiny s bonusem
-    void attackGroup(ArmyGroup& attackers,
-                     ArmyGroup& defenders,
-                     double bonus) {
-
-        Soldier* target = firstAlive(defenders);
-        if (!target) return;
-
-        for (auto& attacker : attackers.getSoldiers()) {
-            if (!attacker.isAlive()) continue;
-
-            target->takeDamage(
-                static_cast<int>(attacker.getDps() * bonus)
-                );
-
-            if (!target->isAlive()) {
-                target = firstAlive(defenders);
-                if (!target) return;
-            }
-        }
+        return alive[dist(rng)];
     }
 };
 
@@ -122,20 +62,20 @@ public:
     BattleSimulator(BattleStrategy* strat)
         : strategy(strat) {}
 
-    void fight(Army& a, Army& b) {
+    void fight(IUnit& a, IUnit& b) {
         int round = 1;
 
-        while (a.totalAlive() > 0 && b.totalAlive() > 0) {
+        while (a.getAliveCount() > 0 && b.getAliveCount() > 0) {
             std::cout << "Round " << round++ << "\n";
 
             strategy->executeRound(a, b);
 
-            std::cout << "Army A alive: " << a.totalAlive()
-                      << " | Army B alive: " << b.totalAlive()
+            std::cout << "Army A alive: " << a.getAliveCount()
+                      << " | Army B alive: " << b.getAliveCount()
                       << "\n\n";
         }
 
-        if (a.totalAlive() > 0)
+        if (a.getAliveCount() > 0)
             std::cout << "Army A wins!\n";
         else
             std::cout << "Army B wins!\n";

@@ -3,46 +3,37 @@
 #define ARMY_H
 
 #include "Soldier.h"
+
 #include <vector>
 
-class ArmyUnit {
+class ComplexUnit : public IUnit
+{
 public:
-    virtual ~ArmyUnit() = default;
-    virtual int getAliveCount() const = 0;
-};
-
-class ArmyGroup : public ArmyUnit {
-public:
-    void add(const Soldier& s) {
-        soldiers.push_back(s);
+    void add(IUnit* s)
+    {
+        m_units.push_back(s);
     }
 
-    std::vector<Soldier>& getSoldiers() {
-        return soldiers;
+    std::vector<IUnit*> getSoldiers() override
+    {
+        std::vector<IUnit*> tmp;
+        for(auto& s : m_units)
+            for(auto &ss : s->getSoldiers())
+                tmp.push_back(ss);
+        return tmp;
     }
 
-    int getAliveCount() const override {
+    int getAliveCount() const override
+    {
         int count = 0;
-        for (const auto& s : soldiers)
-            if (s.isAlive()) count++;
+        for (const auto& s : m_units)
+            count += s->getAliveCount();
         return count;
     }
 
 private:
-    std::vector<Soldier> soldiers;
-};
-
-class Army {
-public:
-    ArmyGroup archers;
-    ArmyGroup cavalry;
-    ArmyGroup infantry;
-
-    int totalAlive() const {
-        return archers.getAliveCount() +
-               cavalry.getAliveCount() +
-               infantry.getAliveCount();
-    }
+    std::vector<IUnit*> m_units;
 };
 
 #endif // ARMY_H
+
